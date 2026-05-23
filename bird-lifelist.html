@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Life List — Field Ornithology</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inconsolata:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#000;--glass:rgba(0,0,0,0.82);--glass2:rgba(8,8,8,0.94);
+  --ink:#e8e8e8;--dim:#666;--dim2:#3a3a3a;
+  --border:rgba(255,255,255,0.12);--border2:rgba(255,255,255,0.06);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html{height:100%;}
+body{width:100%;height:100%;background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;overflow:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);}
+#globeCanvas{position:fixed;inset:0;z-index:0;cursor:grab;touch-action:none;}
+#globeCanvas:active{cursor:grabbing;}
+#stars{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+.ui{position:fixed;inset:0;z-index:10;pointer-events:none;display:grid;grid-template-columns:300px 1fr 290px;grid-template-rows:64px 1fr 36px;padding:18px;gap:10px;}
+
+.header{grid-column:1/-1;grid-row:1;display:flex;align-items:center;gap:14px;pointer-events:none;}
+.title{font-family:'Cormorant Garamond',serif;font-size:1.9rem;font-weight:300;letter-spacing:.06em;line-height:1;}
+.title em{font-style:italic;color:#fff;}
+.title-sub{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-top:3px;}
+.hstats{margin-left:auto;display:flex;gap:18px;align-items:baseline;}
+.hs{text-align:right;}
+.hs-n{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:300;color:#fff;line-height:1;}
+.hs-l{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);}
+
+.panel-left{grid-column:1;grid-row:2;pointer-events:all;display:flex;flex-direction:column;gap:8px;overflow:hidden;min-height:0;transition:opacity .25s,transform .25s;}
+.panel-left.hidden{opacity:0;pointer-events:none;transform:translateX(-12px);}
+
+.panel-toggle{position:fixed;left:18px;bottom:54px;z-index:20;pointer-events:all;background:var(--glass2);border:1px solid var(--border);color:var(--dim);font-family:'Inconsolata',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:6px;transition:color .15s,border-color .15s;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+.panel-toggle:hover{color:#fff;border-color:rgba(255,255,255,.3);}
+.panel-toggle .pt-icon{font-size:11px;transition:transform .25s;}
+.panel-toggle.closed .pt-icon{transform:rotate(180deg);}
+
+.plabel{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);padding-bottom:5px;border-bottom:1px solid var(--border);flex-shrink:0;}
+
+.filter-row{display:flex;gap:6px;align-items:stretch;flex-shrink:0;}
+.search-wrap{position:relative;flex:1;}
+.search-wrap input{width:100%;height:100%;background:var(--glass);border:1px solid var(--border);color:var(--ink);font-family:'Inconsolata',monospace;font-size:12px;padding:8px 10px 8px 28px;outline:none;transition:border-color .2s;-webkit-appearance:none;border-radius:0;}
+.search-wrap input:focus{border-color:rgba(255,255,255,.4);}
+.search-wrap input::placeholder{color:var(--dim);font-style:italic;}
+.si{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:13px;pointer-events:none;}
+
+.endemic-btn{flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--dim);font-family:'Inconsolata',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;padding:0 9px;transition:all .15s;white-space:nowrap;-webkit-appearance:none;border-radius:0;display:flex;align-items:center;gap:4px;}
+.endemic-btn:hover{color:#fff;}
+.endemic-btn.on{background:#fff;border-color:#fff;color:#000;}
+.endemic-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+
+.region-row{display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0;}
+.rfbtn{padding:3px 9px;background:transparent;border:1px solid var(--border);color:var(--dim);font-family:'Inconsolata',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .15s;-webkit-appearance:none;border-radius:0;}
+.rfbtn:hover,.rfbtn.on{background:#fff;border-color:#fff;color:#000;}
+
+.bird-scroll{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent;-webkit-overflow-scrolling:touch;}
+.bird-scroll::-webkit-scrollbar{width:2px;}
+.bird-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);}
+.blist{display:flex;flex-direction:column;gap:6px;padding-bottom:8px;}
+
+.bcard{display:grid;grid-template-columns:56px 1fr;background:var(--glass);border:1px solid var(--border2);cursor:pointer;transition:border-color .15s,background .15s;overflow:hidden;animation:fsIn .3s ease both;position:relative;}
+.bcard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#fff;transform:scaleY(0);transition:transform .15s;transform-origin:bottom;}
+.bcard:hover::before,.bcard.on::before{transform:scaleY(1);}
+.bcard:hover,.bcard.on{border-color:var(--border);background:var(--glass2);}
+.bcard.endemic-card::after{content:'E';position:absolute;top:4px;right:4px;background:#fff;color:#000;font-size:7px;font-weight:700;letter-spacing:1px;padding:1px 4px;}
+@keyframes fsIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:translateX(0);}}
+.bthumb{width:56px;height:50px;object-fit:cover;display:block;filter:grayscale(20%);transition:filter .2s;}
+.bcard:hover .bthumb,.bcard.on .bthumb{filter:grayscale(0%);}
+.binfo{padding:5px 9px;display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;}
+.bname{font-family:'Cormorant Garamond',serif;font-size:.9rem;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.blatin{font-size:9px;font-style:italic;color:var(--dim);font-family:'Cormorant Garamond',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bloc{font-size:9px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+.panel-right{grid-column:3;grid-row:2;pointer-events:all;display:flex;flex-direction:column;gap:10px;overflow-y:auto;min-height:0;scrollbar-width:none;}
+.panel-right::-webkit-scrollbar{display:none;}
+
+.detail{background:var(--glass2);border:1px solid var(--border);overflow:hidden;display:none;animation:faIn .25s ease;position:relative;flex-shrink:0;}
+.detail.on{display:flex;flex-direction:column;}
+@keyframes faIn{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
+.dphoto{width:100%;height:175px;object-fit:cover;display:block;}
+.dbody{padding:14px 16px 16px;}
+.dnum{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);}
+.dname{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;color:#fff;line-height:1.1;margin-top:3px;}
+.dlatin{font-family:'Cormorant Garamond',serif;font-size:.82rem;font-style:italic;color:var(--dim);margin-top:2px;}
+.dendemic-tag{display:inline-block;margin-top:5px;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#000;background:#fff;padding:2px 7px;}
+.ddiv{height:1px;background:var(--border);margin:11px 0;}
+.dmeta{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.dmi label{display:block;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-bottom:2px;}
+.dmi span{font-size:11px;color:var(--ink);line-height:1.3;}
+.dnotes{margin-top:11px;font-family:'Cormorant Garamond',serif;font-size:.85rem;font-style:italic;color:var(--dim);line-height:1.7;border-top:1px solid var(--border2);padding-top:10px;}
+.dclose{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.7);border:1px solid var(--border);color:var(--dim);font-size:15px;cursor:pointer;width:24px;height:24px;display:flex;align-items:center;justify-content:center;transition:color .15s;font-family:monospace;}
+.dclose:hover{color:#fff;}
+.ddelete{margin-top:14px;background:none;border:1px solid rgba(255,80,80,.3);color:rgba(255,80,80,.5);font-family:'Inconsolata',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:5px 10px;cursor:pointer;transition:all .2s;width:100%;}
+.ddelete:hover{border-color:rgba(255,80,80,.8);color:rgba(255,80,80,.9);}
+
+.add-panel{background:var(--glass);border:1px solid var(--border);overflow:hidden;flex-shrink:0;}
+.atoggle{width:100%;background:none;border:none;padding:11px 13px;display:flex;align-items:center;gap:7px;color:var(--dim);font-family:'Inconsolata',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:color .15s;pointer-events:all;}
+.atoggle:hover{color:#fff;}
+.aplus{font-size:16px;line-height:1;color:#fff;}
+.aform{display:none;padding:0 13px 13px;flex-direction:column;gap:7px;animation:faIn .2s ease;}
+.aform.on{display:flex;}
+.ff{display:flex;flex-direction:column;gap:2px;}
+.ff label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);}
+.ff input[type=text],.ff input[type=number],.ff input[type=date]{background:rgba(0,0,0,.5);border:1px solid var(--border2);border-bottom:1px solid rgba(255,255,255,.2);color:var(--ink);font-family:'Inconsolata',monospace;font-size:11px;padding:6px 8px;outline:none;transition:border-color .15s;width:100%;-webkit-appearance:none;border-radius:0;}
+.ff input:focus{border-bottom-color:#fff;}
+.ff input::placeholder{color:var(--dim2);font-style:italic;}
+.endemic-check-row{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.endemic-check-row input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:#fff;}
+.endemic-check-row span{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);}
+.ffrow{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.plabel2{display:flex;align-items:center;gap:5px;padding:7px 9px;border:1px dashed rgba(255,255,255,.2);color:var(--dim);font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .15s;}
+.plabel2:hover{border-color:#fff;color:#fff;}
+#photoInput{display:none;}
+#photoPreviewWrap{display:none;}
+#photoPreview{width:100%;height:65px;object-fit:cover;display:block;}
+.photo-size-note{font-size:8px;color:var(--dim);font-style:italic;}
+.cnote{font-size:9px;color:var(--dim);font-style:italic;line-height:1.5;}
+.sbtn{padding:9px;background:#fff;border:none;color:#000;font-family:'Inconsolata',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-weight:600;transition:opacity .15s;pointer-events:all;-webkit-appearance:none;border-radius:0;position:relative;}
+.sbtn:hover{opacity:.85;}.sbtn:active{opacity:.7;}
+.sbtn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Upload progress bar */
+.upload-bar-wrap{display:none;height:2px;background:var(--border2);margin-top:4px;}
+.upload-bar-wrap.on{display:block;}
+.upload-bar{height:100%;background:#fff;width:0%;transition:width .2s;}
+.upload-status{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--dim);margin-top:4px;min-height:12px;}
+
+.bottom{grid-column:1/-1;grid-row:3;display:flex;align-items:center;pointer-events:none;}
+.ghint{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.15);}
+
+.ptt{position:fixed;background:var(--glass2);border:1px solid var(--border);padding:7px 11px;pointer-events:none;z-index:50;display:none;}
+.ptt.on{display:block;}
+.ptn{font-family:'Cormorant Garamond',serif;font-size:.92rem;color:#fff;}
+.ptl{font-size:9px;font-style:italic;color:var(--dim);font-family:'Cormorant Garamond',serif;}
+.ptloc{font-size:9px;color:#aaa;margin-top:2px;}
+
+.gch{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:5;text-align:center;opacity:.1;font-family:'Cormorant Garamond',serif;font-size:1rem;font-style:italic;color:#fff;letter-spacing:2px;transition:opacity 1.5s;}
+
+/* Error / status toast */
+.toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:var(--glass2);border:1px solid var(--border);padding:9px 16px;font-size:10px;letter-spacing:1px;z-index:200;pointer-events:none;opacity:0;transition:opacity .3s;white-space:nowrap;}
+.toast.on{opacity:1;}
+.toast.err{border-color:rgba(255,80,80,.5);color:rgba(255,120,120,1);}
+.toast.ok{border-color:rgba(100,255,150,.3);color:rgba(150,255,180,1);}
+
+#loadOverlay{position:fixed;inset:0;z-index:100;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;transition:opacity .5s;}
+#loadOverlay.done{opacity:0;pointer-events:none;}
+.load-ring{width:36px;height:36px;border:1px solid rgba(255,255,255,.12);border-top-color:rgba(255,255,255,.6);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.load-txt{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);}
+
+/* ── MOBILE ── */
+@media(max-width:699px){
+  .ui{display:flex;flex-direction:column;padding:0;gap:0;}
+  .header{position:fixed;top:0;left:0;right:0;z-index:20;background:rgba(0,0,0,.9);border-bottom:1px solid var(--border);padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));pointer-events:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+  .title{font-size:1.3rem;}.title-sub{display:none;}.hs-n{font-size:1.1rem;}.hs-l{font-size:7px;}.hstats{gap:14px;}
+  .panel-left{position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(0,0,0,.95);border-top:1px solid var(--border);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);height:var(--sheet-h,160px);transition:height .3s cubic-bezier(.4,0,.2,1),opacity .25s,transform .25s;overflow:hidden;padding:0 14px 14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:7px;touch-action:none;}
+  .panel-left.hidden{opacity:0;transform:translateY(20px);pointer-events:none;}
+  .sheet-handle{display:flex;justify-content:center;align-items:center;padding:8px 0 4px;cursor:pointer;flex-shrink:0;}
+  .sheet-handle::after{content:'';display:block;width:36px;height:3px;background:rgba(255,255,255,.22);border-radius:2px;}
+  .region-row{display:none;}.panel-left.expanded .region-row{display:flex;}
+  .bcard{animation:none;}
+  .panel-right{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.97);display:flex;flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0;padding-bottom:env(safe-area-inset-bottom);transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);pointer-events:none;}
+  .panel-right.open{transform:translateY(0);pointer-events:all;}
+  .detail{display:flex;flex-direction:column;flex:1;border:none;}.detail.on{display:flex;}
+  .dphoto{height:280px;max-height:42vh;}.dbody{padding:20px 18px 24px;}.dname{font-size:1.8rem;}
+  .add-panel{border:none;border-top:1px solid var(--border);margin-top:auto;}
+  .aform{max-height:none;}.ff input{font-size:13px;padding:8px 10px;}.sbtn{padding:13px;font-size:11px;}
+  .bottom{display:none;}
+  .bcard{min-height:52px;}.bthumb{width:60px;height:52px;}
+  .panel-toggle{bottom:calc(170px + env(safe-area-inset-bottom));left:12px;}
+  .mob-add-btn{display:flex;position:fixed;bottom:calc(170px + env(safe-area-inset-bottom));right:16px;z-index:25;width:46px;height:46px;background:#fff;color:#000;border:none;cursor:pointer;align-items:center;justify-content:center;font-size:24px;font-family:monospace;line-height:1;box-shadow:0 2px 16px rgba(0,0,0,.5);transition:opacity .15s;}
+  .mob-add-btn:active{opacity:.8;}
+  .mob-back{display:flex;position:sticky;top:0;left:0;right:0;z-index:5;background:rgba(0,0,0,.95);border-bottom:1px solid var(--border);align-items:center;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));gap:10px;cursor:pointer;pointer-events:all;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);}
+  .mob-back::before{content:'←';font-size:14px;color:#fff;}
+  .gch{font-size:.8rem;top:45%;}
+}
+@media(min-width:700px){
+  .sheet-handle{display:none;}.mob-add-btn{display:none;}.mob-back{display:none;}
+}
+</style>
+</head>
+<body>
+
+<div id="loadOverlay"><div class="load-ring"></div><div class="load-txt" id="loadTxt">Loading map data…</div></div>
+<canvas id="stars"></canvas>
+<canvas id="globeCanvas"></canvas>
+<div class="gch" id="gch">drag to rotate · click pins</div>
+<div class="toast" id="toast"></div>
+
+<div class="ui">
+  <div class="header">
+    <div><div class="title"><em>Life List</em></div><div class="title-sub">Field Ornithology Record</div></div>
+    <div class="hstats">
+      <div class="hs"><div class="hs-n" id="hTotal">0</div><div class="hs-l">Species</div></div>
+      <div class="hs"><div class="hs-n" id="hLocs">0</div><div class="hs-l">Locations</div></div>
+    </div>
+  </div>
+
+  <div class="panel-left" id="panelLeft">
+    <div class="sheet-handle" id="sheetHandle"></div>
+    <div class="plabel">Sightings</div>
+    <div class="filter-row">
+      <div class="search-wrap">
+        <span class="si">⌕</span>
+        <input type="text" id="searchInput" placeholder="Search species or place…">
+      </div>
+      <button class="endemic-btn" id="endemicBtn"><span class="endemic-dot"></span>Endemic</button>
+    </div>
+    <div class="region-row" id="regionRow"></div>
+    <div class="bird-scroll"><div class="blist" id="birdList"></div></div>
+  </div>
+
+  <div class="panel-right" id="panelRight">
+    <div class="mob-back" id="mobBack">Back to list</div>
+    <div style="position:relative;flex-shrink:0;">
+      <div class="detail" id="detail">
+        <img class="dphoto" id="dPhoto" src="" alt="">
+        <div class="dbody">
+          <div class="dnum" id="dNum"></div>
+          <div class="dname" id="dName"></div>
+          <div class="dlatin" id="dLatin"></div>
+          <div id="dEndemicTag"></div>
+          <div class="ddiv"></div>
+          <div class="dmeta" id="dMeta"></div>
+          <div class="dnotes" id="dNotes"></div>
+          <button class="ddelete" id="dDelete">Remove sighting</button>
+        </div>
+      </div>
+      <button class="dclose" id="dClose" style="display:none">×</button>
+    </div>
+    <div class="add-panel">
+      <button class="atoggle" id="addToggle"><span class="aplus">+</span> Log new sighting</button>
+      <div class="aform" id="addForm">
+        <div class="ff"><label>Common Name *</label><input type="text" id="iName" placeholder="e.g. Steller's Jay"></div>
+        <div class="ff"><label>Latin Binomial</label><input type="text" id="iLatin" placeholder="e.g. Cyanocitta stelleri"></div>
+        <div class="ffrow">
+          <div class="ff"><label>Family</label><input type="text" id="iFamily" placeholder="Corvidae"></div>
+          <div class="ff"><label>Region</label><input type="text" id="iRegion" placeholder="BC, Canada"></div>
+        </div>
+        <div class="ff"><label>Location</label><input type="text" id="iLocation" placeholder="e.g. Manning Park, BC"></div>
+        <div class="ffrow">
+          <div class="ff"><label>Date</label><input type="date" id="iDate"></div>
+          <div class="ff"><label>Behaviour</label><input type="text" id="iBeh" placeholder="foraging, singing…"></div>
+        </div>
+        <div class="ffrow">
+          <div class="ff"><label>Latitude</label><input type="number" id="iLat" step="0.001" placeholder="49.28" inputmode="decimal"></div>
+          <div class="ff"><label>Longitude</label><input type="number" id="iLng" step="0.001" placeholder="-123.12" inputmode="decimal"></div>
+        </div>
+        <div class="cnote">💡 Right-click any spot on Google Maps to copy lat/lng</div>
+        <div class="ff"><label>Field Notes</label><input type="text" id="iNotes" placeholder="Plumage, song, habitat…"></div>
+        <label class="endemic-check-row"><input type="checkbox" id="iEndemic"><span>Mark as endemic to this region</span></label>
+        <label class="plabel2" for="photoInput">📷 Upload Photo *</label>
+        <input type="file" id="photoInput" accept="image/*" capture="environment">
+        <div id="photoPreviewWrap">
+          <img id="photoPreview" alt="preview">
+          <div class="photo-size-note" id="photoSizeNote"></div>
+        </div>
+        <div class="upload-bar-wrap" id="uploadBarWrap"><div class="upload-bar" id="uploadBar"></div></div>
+        <div class="upload-status" id="uploadStatus"></div>
+        <button class="sbtn" id="submitBtn">Record Sighting →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom"><div class="ghint">Drag to rotate · Scroll to zoom · Click pins</div></div>
+</div>
+
+<button class="panel-toggle" id="panelToggle"><span class="pt-icon">◀</span><span class="pt-label">List</span></button>
+<button class="mob-add-btn" id="mobAddBtn" aria-label="Log new sighting">+</button>
+
+<div class="ptt" id="ptt">
+  <div class="ptn" id="ptName"></div>
+  <div class="ptl" id="ptLatin"></div>
+  <div class="ptloc" id="ptLoc"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// SUPABASE CONFIG
+// ═══════════════════════════════════════════════
+const SB_URL = 'https://rszirvjimzthfcckyxtk.supabase.co';
+const SB_KEY = 'sb_publishable_7vthSH70q3LfapCnLA9GrQ_gVWXGvme';
+const BUCKET  = 'bird-photos';
+
+// Minimal Supabase REST client — no SDK needed
+const sb = {
+  headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+
+  async select(table, query=''){
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}&order=created_at.asc`, { headers: this.headers });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+
+  async insert(table, row){
+    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method:'POST',
+      headers: {...this.headers, 'Prefer':'return=representation'},
+      body: JSON.stringify(row)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return (await r.json())[0];
+  },
+
+  async delete(table, id){
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method:'DELETE', headers: this.headers
+    });
+    if(!r.ok) throw new Error(await r.text());
+  },
+
+  async uploadPhoto(blob, filename){
+    const r = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${filename}`, {
+      method:'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': blob.type, 'x-upsert':'true' },
+      body: blob
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return `${SB_URL}/storage/v1/object/public/${BUCKET}/${filename}`;
+  },
+
+  async deletePhoto(filename){
+    await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${filename}`, {
+      method:'DELETE',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+    });
+  }
+};
+
+// ═══════════════════════════════════════════════
+// PHOTO COMPRESSION
+// ═══════════════════════════════════════════════
+function compressPhoto(file, maxW=1200, quality=0.82){
+  return new Promise((res,rej)=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      let {width:w,height:h}=img;
+      if(w>maxW){ h=Math.round(h*maxW/w); w=maxW; }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(b=>{ if(b) res(b); else rej(new Error('Compression failed')); },'image/jpeg',quality);
+    };
+    img.onerror=rej; img.src=url;
+  });
+}
+
+// ═══════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════
+let toastTimer=null;
+function toast(msg, type='ok', dur=3000){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=`toast ${type} on`;
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('on'), dur);
+}
+
+// ═══════════════════════════════════════════════
+// STARS
+// ═══════════════════════════════════════════════
+(function(){
+  const c=document.getElementById('stars'),ctx=c.getContext('2d');
+  c.width=window.innerWidth; c.height=window.innerHeight;
+  for(let i=0;i<320;i++){
+    ctx.beginPath(); ctx.arc(Math.random()*c.width,Math.random()*c.height,Math.random()*.85,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${Math.random()*.45+.05})`; ctx.fill();
+  }
+})();
+
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+let birds=[];
+let activeId=null, filterRegion='all', filterSearch='', filterEndemic=false;
+const isMobile=()=>window.innerWidth<700;
+
+// ═══════════════════════════════════════════════
+// THREE.JS GLOBE
+// ═══════════════════════════════════════════════
+const glCanvas=document.getElementById('globeCanvas');
+const renderer=new THREE.WebGLRenderer({canvas:glCanvas,antialias:true,alpha:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(45,window.innerWidth/window.innerHeight,0.1,1000);
+camera.position.z=2.8;
+scene.add(new THREE.AmbientLight(0xffffff,1));
+const GLOBE_R=1.0;
+const globeGroup=new THREE.Group(); scene.add(globeGroup);
+globeGroup.add(new THREE.Mesh(new THREE.SphereGeometry(GLOBE_R-.001,64,64),new THREE.MeshBasicMaterial({color:0x050505})));
+
+function makeGraticule(){
+  const verts=[],step=10,SEGS=64,R=GLOBE_R+.001;
+  function lv(lat,lng){ const phi=(90-lat)*Math.PI/180,th=(lng+180)*Math.PI/180; return [-R*Math.sin(phi)*Math.cos(th),R*Math.cos(phi),R*Math.sin(phi)*Math.sin(th)]; }
+  for(let lat=-80;lat<=80;lat+=step) for(let i=0;i<SEGS;i++){ const a=(i/SEGS)*360-180,b=((i+1)/SEGS)*360-180; verts.push(...lv(lat,a),...lv(lat,b)); }
+  for(let lng=-180;lng<180;lng+=step) for(let i=0;i<SEGS;i++){ const a=(i/SEGS)*180-90,b=((i+1)/SEGS)*180-90; verts.push(...lv(a,lng),...lv(b,lng)); }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+  return new THREE.LineSegments(geo,new THREE.LineBasicMaterial({color:0x1e1e1e}));
+}
+globeGroup.add(makeGraticule());
+
+function ringToSegments(ring,R,verts){
+  for(let i=0;i<ring.length-1;i++){
+    const [lng1,lat1]=ring[i],[lng2,lat2]=ring[i+1];
+    const steps=Math.ceil(Math.hypot(lng2-lng1,lat2-lat1)/2)+1;
+    for(let s=0;s<steps;s++) for(const t of [s/steps,(s+1)/steps]){
+      const lat=lat1+(lat2-lat1)*t,lng=lng1+(lng2-lng1)*t;
+      const phi=(90-lat)*Math.PI/180,th=(lng+180)*Math.PI/180;
+      verts.push(-R*Math.sin(phi)*Math.cos(th),R*Math.cos(phi),R*Math.sin(phi)*Math.sin(th));
+    }
+  }
+}
+function geojsonToSegGeo(geojson,R){
+  const verts=[];
+  for(const f of geojson.features){ const g=f.geometry; if(!g) continue;
+    if(g.type==='LineString') ringToSegments(g.coordinates,R,verts);
+    else if(g.type==='MultiLineString') for(const r of g.coordinates) ringToSegments(r,R,verts);
+    else if(g.type==='Polygon') for(const r of g.coordinates) ringToSegments(r,R,verts);
+    else if(g.type==='MultiPolygon') for(const p of g.coordinates) for(const r of p) ringToSegments(r,R,verts);
+  }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3)); return geo;
+}
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+
+async function initGlobe(){
+  document.getElementById('loadTxt').textContent='Loading map data…';
+  await loadScript('https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js');
+  const [lr,cr]=await Promise.all([fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json'),fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')]);
+  const [lt,ct]=await Promise.all([lr.json(),cr.json()]);
+  const landGeo=topojson.feature(lt,lt.objects.land);
+  const bordersGeo=topojson.mesh(ct,ct.objects.countries,(a,b)=>a!==b);
+  const R=GLOBE_R+.002;
+  const features=landGeo.type==='FeatureCollection'?landGeo.features:[{geometry:landGeo}];
+  globeGroup.add(new THREE.LineSegments(geojsonToSegGeo({features},R),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.85})));
+  const bv=[];
+  if(bordersGeo.type==='MultiLineString') for(const r of bordersGeo.coordinates) ringToSegments(r,R+.0005,bv);
+  else if(bordersGeo.type==='LineString') ringToSegments(bordersGeo.coordinates,R+.0005,bv);
+  if(bv.length){ const bg=new THREE.BufferGeometry(); bg.setAttribute('position',new THREE.Float32BufferAttribute(bv,3)); globeGroup.add(new THREE.LineSegments(bg,new THREE.LineBasicMaterial({color:0x444444}))); }
+}
+
+// ═══════════════════════════════════════════════
+// PINS + PHOTO SPRITES
+// ═══════════════════════════════════════════════
+const pinGroup=new THREE.Group(); scene.add(pinGroup);
+function ll2v(lat,lng,r){ const phi=(90-lat)*Math.PI/180,th=(lng+180)*Math.PI/180; return new THREE.Vector3(-r*Math.sin(phi)*Math.cos(th),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(th)); }
+const dotGeo=new THREE.SphereGeometry(.015,8,8);
+const spikeGeo=new THREE.CylinderGeometry(.0035,.001,.03,6);
+const photoTexCache={};
+const pinSprites={};
+
+function makePhotoTex(bird){
+  if(photoTexCache[bird.id]) return photoTexCache[bird.id];
+  const SIZE=128,tc=document.createElement('canvas'); tc.width=SIZE; tc.height=SIZE;
+  const tex=new THREE.CanvasTexture(tc);
+  const entry={tex,canvas:tc,ctx:tc.getContext('2d'),loaded:false};
+  photoTexCache[bird.id]=entry;
+  const img=new Image(); img.crossOrigin='anonymous';
+  img.onload=()=>{
+    const {ctx:c,canvas:cv}=entry,S=SIZE;
+    c.clearRect(0,0,S,S); c.save();
+    c.beginPath(); c.arc(S/2,S/2,S/2-2,0,Math.PI*2); c.clip();
+    c.drawImage(img,0,0,S,S); c.restore();
+    c.beginPath(); c.arc(S/2,S/2,S/2-2,0,Math.PI*2);
+    c.strokeStyle=bird.endemic?'#ffee88':'#ffffff'; c.lineWidth=bird.endemic?4:3; c.stroke();
+    entry.tex.needsUpdate=true; entry.loaded=true;
+  };
+  img.src=bird.photo_url; return entry;
+}
+
+function buildPins(){
+  while(pinGroup.children.length) pinGroup.remove(pinGroup.children[0]);
+  Object.keys(pinSprites).forEach(k=>delete pinSprites[k]);
+  const visSet=new Set(visible().map(b=>b.id));
+  birds.forEach(b=>{
+    if(b.lat==null||b.lng==null||!visSet.has(b.id)) return;
+    const pos=ll2v(b.lat,b.lng,1.024);
+    const col=b.id===activeId?0xffffff:(b.endemic?0xffee44:0xff4422);
+    const mat=new THREE.MeshBasicMaterial({color:col});
+    const dot=new THREE.Mesh(dotGeo,mat); dot.position.copy(pos); dot.userData={id:b.id}; pinGroup.add(dot);
+    const sp=new THREE.Mesh(spikeGeo,mat.clone());
+    const dir=pos.clone().normalize();
+    sp.position.copy(pos.clone().sub(dir.clone().multiplyScalar(.018)));
+    sp.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+    sp.userData={id:b.id}; pinGroup.add(sp);
+    const cache=makePhotoTex(b);
+    const sprMat=new THREE.SpriteMaterial({map:cache.tex,transparent:true,opacity:0,depthTest:false});
+    const spr=new THREE.Sprite(sprMat); spr.scale.set(.18,.18,1);
+    spr.position.copy(ll2v(b.lat,b.lng,1.15)); spr.userData={id:b.id}; pinGroup.add(spr);
+    pinSprites[b.id]={dot,spike:sp,sprite:spr,pos:pos.clone(),bird:b};
+  });
+}
+
+const _rotMat=new THREE.Matrix4();
+const FACE_IN=0.72, FACE_OUT=0.65;
+function updateSprites(){
+  _rotMat.extractRotation(pinGroup.matrixWorld);
+  const camPos=camera.position.clone();
+  Object.values(pinSprites).forEach(({dot,spike,sprite,pos})=>{
+    const wp=pos.clone().applyMatrix4(_rotMat).normalize();
+    const dp=wp.dot(camPos.clone().normalize());
+    const tOp=dp>FACE_IN?Math.min(1,(dp-FACE_IN)/(1-FACE_IN)*3):0;
+    sprite.material.opacity+=(tOp-sprite.material.opacity)*.12;
+    sprite.material.needsUpdate=true;
+    const dOp=dp>FACE_OUT?Math.max(0,1-sprite.material.opacity*2):1;
+    dot.material.opacity+=(dOp-dot.material.opacity)*.12; dot.material.transparent=true; dot.material.needsUpdate=true;
+    spike.material.opacity=dot.material.opacity; spike.material.transparent=true; spike.material.needsUpdate=true;
+    const sc=0.16+sprite.material.opacity*.06; sprite.scale.set(sc,sc,1);
+  });
+}
+
+// ═══════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════
+let drag=false,pm={x:0,y:0},rv={x:0,y:0};
+let tRot={x:.3,y:-1.8},cRot={x:.3,y:-1.8},tZoom=2.8,cZoom=2.8,autoSpin=true;
+function stopSpin(){ autoSpin=false; document.getElementById('gch').style.opacity='0'; }
+glCanvas.addEventListener('mousedown',e=>{ if(e.button!==0)return; drag=true; pm={x:e.clientX,y:e.clientY}; rv={x:0,y:0}; stopSpin(); });
+window.addEventListener('mousemove',e=>{ if(drag){ const dx=e.clientX-pm.x,dy=e.clientY-pm.y; rv={x:dy*.005,y:dx*.005}; tRot.x+=dy*.005; tRot.y+=dx*.005; pm={x:e.clientX,y:e.clientY}; } if(!isMobile()) hoverCheck(e.clientX,e.clientY); });
+window.addEventListener('mouseup',()=>drag=false);
+glCanvas.addEventListener('wheel',e=>{ e.preventDefault(); tZoom=Math.max(1.4,Math.min(5,tZoom+e.deltaY*.003)); },{passive:false});
+let lt=null,lt2=null,ltDist=null;
+glCanvas.addEventListener('touchstart',e=>{ stopSpin(); if(e.touches.length===1){ lt={x:e.touches[0].clientX,y:e.touches[0].clientY}; lt2=null; ltDist=null; } else if(e.touches.length===2){ lt=null; lt2=[{x:e.touches[0].clientX,y:e.touches[0].clientY},{x:e.touches[1].clientX,y:e.touches[1].clientY}]; ltDist=Math.hypot(lt2[1].x-lt2[0].x,lt2[1].y-lt2[0].y); } },{passive:true});
+glCanvas.addEventListener('touchmove',e=>{ e.preventDefault(); if(e.touches.length===1&&lt){ const t={x:e.touches[0].clientX,y:e.touches[0].clientY}; tRot.x+=(t.y-lt.y)*.005; tRot.y+=(t.x-lt.x)*.005; lt=t; } else if(e.touches.length===2&&ltDist!==null){ const d=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY); tZoom=Math.max(1.4,Math.min(5,tZoom*(ltDist/d))); ltDist=d; } },{passive:false});
+glCanvas.addEventListener('touchend',e=>{ if(e.changedTouches.length===1&&lt!==null){ const t=e.changedTouches[0]; if(Math.abs(t.clientX-lt.x)<8&&Math.abs(t.clientY-lt.y)<8){ const h=hits(t.clientX,t.clientY); if(h.length){ const b=birds.find(x=>x.id===h[0].object.userData.id); if(b){ openDetail(b); hilite(b.id); if(isMobile()) openRightPanel(); } } } } lt=null; },{passive:true});
+glCanvas.addEventListener('click',e=>{ if(isMobile())return; const h=hits(e.clientX,e.clientY); if(h.length){ const b=birds.find(x=>x.id===h[0].object.userData.id); if(b){ openDetail(b); hilite(b.id); } } });
+
+const rc=new THREE.Raycaster(),m2=new THREE.Vector2();
+function hits(cx,cy){ m2.x=(cx/window.innerWidth)*2-1; m2.y=-(cy/window.innerHeight)*2+1; rc.setFromCamera(m2,camera); return rc.intersectObjects(pinGroup.children); }
+
+const ptt=document.getElementById('ptt');
+function hoverCheck(cx,cy){ const h=hits(cx,cy); if(h.length){ const b=birds.find(x=>x.id===h[0].object.userData.id); if(b){ ptt.style.left=(cx+13)+'px'; ptt.style.top=(cy-8)+'px'; document.getElementById('ptName').textContent=b.name; document.getElementById('ptLatin').textContent=b.latin||''; document.getElementById('ptLoc').textContent=b.location||''; ptt.classList.add('on'); glCanvas.style.cursor='pointer'; return; } } ptt.classList.remove('on'); glCanvas.style.cursor=drag?'grabbing':'grab'; }
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(!drag){ if(autoSpin) tRot.y+=.0015; else { rv.x*=.93; rv.y*=.93; tRot.x+=rv.x; tRot.y+=rv.y; } }
+  cRot.x+=(tRot.x-cRot.x)*.08; cRot.y+=(tRot.y-cRot.y)*.08; cZoom+=(tZoom-cZoom)*.08;
+  globeGroup.rotation.x=cRot.x; globeGroup.rotation.y=cRot.y;
+  pinGroup.rotation.x=cRot.x; pinGroup.rotation.y=cRot.y;
+  camera.position.z=cZoom; updateSprites(); renderer.render(scene,camera);
+}
+animate();
+function spinTo(lat,lng){ const phi=(90-lat)*Math.PI/180,th=(lng+180)*Math.PI/180; tRot.x=-(phi-Math.PI/2)*.65; tRot.y=-th+Math.PI; tZoom=isMobile()?2.2:1.85; autoSpin=false; }
+
+// ═══════════════════════════════════════════════
+// PANEL TOGGLE
+// ═══════════════════════════════════════════════
+let panelVisible=true;
+document.getElementById('panelToggle').addEventListener('click',()=>{
+  panelVisible=!panelVisible;
+  document.getElementById('panelLeft').classList.toggle('hidden',!panelVisible);
+  document.getElementById('panelToggle').classList.toggle('closed',!panelVisible);
+});
+
+// ═══════════════════════════════════════════════
+// ENDEMIC FILTER
+// ═══════════════════════════════════════════════
+document.getElementById('endemicBtn').addEventListener('click',()=>{
+  filterEndemic=!filterEndemic;
+  document.getElementById('endemicBtn').classList.toggle('on',filterEndemic);
+  renderList(); buildPins();
+});
+
+// ═══════════════════════════════════════════════
+// MOBILE SHEET
+// ═══════════════════════════════════════════════
+const panelLeft=document.getElementById('panelLeft');
+const SHEET_COL=160,SHEET_EXP=Math.min(window.innerHeight*.55,420);
+function setSheetH(h){ panelLeft.style.setProperty('--sheet-h',h+'px'); }
+setSheetH(SHEET_COL);
+let sheetExp=false;
+document.getElementById('sheetHandle').addEventListener('click',()=>{ sheetExp=!sheetExp; setSheetH(sheetExp?SHEET_EXP:SHEET_COL); panelLeft.classList.toggle('expanded',sheetExp); });
+let stY=null;
+panelLeft.addEventListener('touchstart',e=>{ stY=e.touches[0].clientY; },{passive:true});
+panelLeft.addEventListener('touchend',e=>{ if(stY===null)return; const dy=e.changedTouches[0].clientY-stY; if(dy<-40&&!sheetExp){ sheetExp=true; setSheetH(SHEET_EXP); panelLeft.classList.add('expanded'); } else if(dy>40&&sheetExp){ sheetExp=false; setSheetH(SHEET_COL); panelLeft.classList.remove('expanded'); } stY=null; },{passive:true});
+
+// ═══════════════════════════════════════════════
+// MOBILE RIGHT PANEL
+// ═══════════════════════════════════════════════
+const panelRight=document.getElementById('panelRight');
+function openRightPanel(){ panelRight.classList.add('open'); panelRight.scrollTop=0; document.getElementById('dClose').style.display='none'; }
+function closeRightPanel(){ panelRight.classList.remove('open'); }
+document.getElementById('mobBack').addEventListener('click',closeRightPanel);
+document.getElementById('dClose').addEventListener('click',()=>{ document.getElementById('detail').classList.remove('on'); activeId=null; buildPins(); document.querySelectorAll('.bcard').forEach(e=>e.classList.remove('on')); if(isMobile()) closeRightPanel(); });
+document.getElementById('mobAddBtn').addEventListener('click',()=>{ document.getElementById('detail').classList.remove('on'); document.getElementById('addForm').classList.add('on'); openRightPanel(); setTimeout(()=>{ panelRight.scrollTop=panelRight.scrollHeight; },100); });
+
+// ═══════════════════════════════════════════════
+// UI — LIST + FILTERS
+// ═══════════════════════════════════════════════
+function regions(){ return [...new Set(birds.map(b=>b.region).filter(Boolean))].sort(); }
+function buildRegions(){
+  const row=document.getElementById('regionRow');
+  row.innerHTML=`<button class="rfbtn${filterRegion==='all'?' on':''}" data-r="all">All</button>`;
+  regions().forEach(r=>{ const b=document.createElement('button'); b.className='rfbtn'+(filterRegion===r?' on':''); b.dataset.r=r; b.textContent=r.split(',')[0]; row.appendChild(b); });
+  row.querySelectorAll('.rfbtn').forEach(b=>b.addEventListener('click',()=>{ filterRegion=b.dataset.r; buildRegions(); renderList(); buildPins(); }));
+}
+function visible(){
+  let l=[...birds];
+  if(filterRegion!=='all') l=l.filter(b=>b.region===filterRegion);
+  if(filterEndemic) l=l.filter(b=>b.endemic);
+  if(filterSearch.trim()){ const q=filterSearch.toLowerCase(); l=l.filter(b=>(b.name||'').toLowerCase().includes(q)||(b.latin||'').toLowerCase().includes(q)||(b.location||'').toLowerCase().includes(q)||(b.region||'').toLowerCase().includes(q)); }
+  return l;
+}
+function renderList(){
+  const wrap=document.getElementById('birdList'); wrap.innerHTML='';
+  const vis=visible();
+  if(!vis.length){ const e=document.createElement('div'); e.style.cssText='font-size:10px;color:var(--dim);font-style:italic;padding:12px 0;'; e.textContent=filterEndemic?'No endemic sightings logged yet.':'No sightings found.'; wrap.appendChild(e); return; }
+  vis.forEach((b,i)=>{ const el=document.createElement('div'); el.className='bcard'+(b.id===activeId?' on':'')+(b.endemic?' endemic-card':''); el.style.animationDelay=isMobile()?'0s':`${i*.03}s`; el.dataset.id=b.id; el.innerHTML=`<img class="bthumb" src="${b.photo_url}" alt="${b.name}" loading="lazy"><div class="binfo"><div class="bname">${b.name}</div>${b.latin?`<div class="blatin">${b.latin}</div>`:''}<div class="bloc">${b.location||b.region||''}</div></div>`; el.addEventListener('click',()=>{ openDetail(b); hilite(b.id); if(b.lat!=null&&b.lng!=null) spinTo(b.lat,b.lng); if(isMobile()) openRightPanel(); }); wrap.appendChild(el); });
+}
+function stats(){ document.getElementById('hTotal').textContent=birds.length; document.getElementById('hLocs').textContent=new Set(birds.map(b=>b.location||b.region).filter(Boolean)).size; }
+function hilite(id){ activeId=id; buildPins(); document.querySelectorAll('.bcard').forEach(el=>el.classList.toggle('on',parseInt(el.dataset.id)===id)); const card=document.querySelector(`.bcard[data-id="${id}"]`); if(card) card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+function openDetail(b){
+  document.getElementById('dPhoto').src=b.photo_url;
+  document.getElementById('dNum').textContent=`Sighting No. ${b.id}`;
+  document.getElementById('dName').textContent=b.name;
+  document.getElementById('dLatin').textContent=b.latin||'';
+  document.getElementById('dEndemicTag').innerHTML=b.endemic?'<span class="dendemic-tag">Endemic</span>':'';
+  let m='';
+  if(b.family) m+=`<div class="dmi"><label>Family</label><span>${b.family}</span></div>`;
+  if(b.location) m+=`<div class="dmi"><label>Location</label><span>${b.location}</span></div>`;
+  if(b.date) m+=`<div class="dmi"><label>Date</label><span>${fmtDate(b.date)}</span></div>`;
+  if(b.beh) m+=`<div class="dmi"><label>Behaviour</label><span>${b.beh}</span></div>`;
+  if(b.lat!=null&&b.lng!=null) m+=`<div class="dmi"><label>Coords</label><span>${b.lat.toFixed(2)}°, ${b.lng.toFixed(2)}°</span></div>`;
+  document.getElementById('dMeta').innerHTML=m;
+  const nn=document.getElementById('dNotes'); nn.textContent=b.notes||''; nn.style.display=b.notes?'':'none';
+  document.getElementById('detail').classList.add('on');
+  document.getElementById('dDelete').dataset.id=b.id;
+  document.getElementById('dDelete').dataset.photo=b.photo_url;
+  if(!isMobile()) document.getElementById('dClose').style.display='flex';
+}
+function fmtDate(d){ if(!d)return''; try{ return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'}); }catch{ return d; } }
+
+// ═══════════════════════════════════════════════
+// DELETE
+// ═══════════════════════════════════════════════
+document.getElementById('dDelete').addEventListener('click', async function(){
+  const id=parseInt(this.dataset.id);
+  const photoUrl=this.dataset.photo||'';
+  const b=birds.find(x=>x.id===id);
+  if(!b||!confirm(`Remove ${b.name} from your life list?`)) return;
+  try {
+    await sb.delete('birds', id);
+    // Extract filename from URL and delete from storage
+    const fname=photoUrl.split('/').pop();
+    if(fname) await sb.deletePhoto(fname);
+    birds=birds.filter(x=>x.id!==id);
+    document.getElementById('detail').classList.remove('on');
+    activeId=null;
+    if(isMobile()) closeRightPanel();
+    buildPins(); buildRegions(); renderList(); stats();
+    toast('Sighting removed');
+  } catch(e){ toast('Delete failed: '+e.message,'err'); }
+});
+
+// ═══════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════
+document.getElementById('searchInput').addEventListener('input',e=>{ filterSearch=e.target.value; renderList(); buildPins(); });
+document.getElementById('addToggle').addEventListener('click',()=>document.getElementById('addForm').classList.toggle('on'));
+
+// ═══════════════════════════════════════════════
+// PHOTO PICKER + COMPRESSION PREVIEW
+// ═══════════════════════════════════════════════
+let pendingBlob=null;
+document.getElementById('photoInput').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  document.getElementById('photoSizeNote').textContent=`Compressing…`;
+  document.getElementById('photoPreviewWrap').style.display='';
+  try {
+    pendingBlob=await compressPhoto(f);
+    const url=URL.createObjectURL(pendingBlob);
+    document.getElementById('photoPreview').src=url;
+    const kb=Math.round(pendingBlob.size/1024);
+    const origKb=Math.round(f.size/1024);
+    document.getElementById('photoSizeNote').textContent=`${origKb}KB → ${kb}KB after compression`;
+  } catch(err){
+    toast('Photo processing failed','err');
+    document.getElementById('photoSizeNote').textContent='';
+  }
+});
+
+// ═══════════════════════════════════════════════
+// SUBMIT — upload to Supabase
+// ═══════════════════════════════════════════════
+document.getElementById('submitBtn').addEventListener('click', async ()=>{
+  const name=document.getElementById('iName').value.trim();
+  if(!name){ document.getElementById('iName').focus(); return; }
+  if(!pendingBlob){ toast('A photo is required','err'); return; }
+
+  const btn=document.getElementById('submitBtn');
+  const barWrap=document.getElementById('uploadBarWrap');
+  const bar=document.getElementById('uploadBar');
+  const status=document.getElementById('uploadStatus');
+
+  btn.disabled=true; btn.textContent='Uploading…';
+  barWrap.classList.add('on'); bar.style.width='10%';
+  status.textContent='Compressing photo…';
+
+  try {
+    // Upload photo
+    bar.style.width='30%'; status.textContent='Uploading photo…';
+    const ext='jpg';
+    const filename=`${Date.now()}_${name.replace(/[^a-z0-9]/gi,'_').toLowerCase()}.${ext}`;
+    const photoUrl=await sb.uploadPhoto(pendingBlob, filename);
+
+    bar.style.width='70%'; status.textContent='Saving record…';
+
+    // Insert bird record
+    const latV=document.getElementById('iLat').value, lngV=document.getElementById('iLng').value;
+    const row={
+      name,
+      latin:    document.getElementById('iLatin').value.trim()||null,
+      family:   document.getElementById('iFamily').value.trim()||null,
+      region:   document.getElementById('iRegion').value.trim()||null,
+      location: document.getElementById('iLocation').value.trim()||null,
+      date:     document.getElementById('iDate').value||null,
+      beh:      document.getElementById('iBeh').value.trim()||null,
+      notes:    document.getElementById('iNotes').value.trim()||null,
+      lat:      latV!==''?parseFloat(latV):null,
+      lng:      lngV!==''?parseFloat(lngV):null,
+      endemic:  document.getElementById('iEndemic').checked,
+      photo_url: photoUrl
+    };
+    const saved=await sb.insert('birds', row);
+    bar.style.width='100%'; status.textContent='Saved!';
+
+    birds.push(saved);
+    ['iName','iLatin','iFamily','iRegion','iLocation','iDate','iBeh','iNotes','iLat','iLng'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('iEndemic').checked=false;
+    document.getElementById('photoInput').value='';
+    document.getElementById('photoPreviewWrap').style.display='none';
+    document.getElementById('photoSizeNote').textContent='';
+    pendingBlob=null;
+    document.getElementById('addForm').classList.remove('on');
+
+    buildPins(); buildRegions(); renderList(); stats();
+    openDetail(saved); hilite(saved.id);
+    if(saved.lat!=null&&saved.lng!=null) spinTo(saved.lat,saved.lng);
+    if(isMobile()) openRightPanel();
+    toast('Sighting saved ✓','ok');
+
+    setTimeout(()=>{ barWrap.classList.remove('on'); bar.style.width='0%'; status.textContent=''; },2000);
+  } catch(err){
+    toast('Upload failed: '+err.message,'err',5000);
+    status.textContent='Error — see toast';
+    console.error(err);
+  } finally {
+    btn.disabled=false; btn.textContent='Record Sighting →';
+  }
+});
+
+// ═══════════════════════════════════════════════
+// LOAD DATA FROM SUPABASE
+// ═══════════════════════════════════════════════
+async function loadBirds(){
+  document.getElementById('loadTxt').textContent='Loading sightings…';
+  try {
+    birds=await sb.select('birds','select=*');
+  } catch(e){
+    console.error('Failed to load birds:',e);
+    toast('Could not load sightings — check Supabase setup','err',6000);
+    birds=[];
+  }
+}
+
+// ═══════════════════════════════════════════════
+// INIT — parallel globe + data load
+// ═══════════════════════════════════════════════
+async function init(){
+  await Promise.all([ initGlobe(), loadBirds() ]);
+  buildRegions(); renderList(); buildPins(); stats();
+  const ov=document.getElementById('loadOverlay');
+  ov.classList.add('done'); setTimeout(()=>ov.remove(),600);
+}
+
+window.addEventListener('resize',()=>{ renderer.setSize(window.innerWidth,window.innerHeight); camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); });
+
+init().catch(err=>{ console.error(err); const ov=document.getElementById('loadOverlay'); ov.classList.add('done'); setTimeout(()=>ov.remove(),600); });
+</script>
+</body>
+</html>
